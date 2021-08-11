@@ -5,6 +5,8 @@ import requests
 import json
 import os
 import unidecode
+import argparse
+import sys
 
 class UDM_Error(Exception):
     def __init__(self, message, societe=None, match=None):
@@ -42,10 +44,19 @@ def connect_DB():
     mycursor = mydb.cursor()
     return mydb, mycursor
 
-def fetch_societe_no_gps(mydb, mycursor):
+def fetch_societe_no_gps(mydb, mycursor, only_presta=True):
     presta_agree_no_gps = "select nom,address,zip,town,client,status from llx_societe_extrafields join \
-    llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid where latitude is null;"
-    mycursor.execute(presta_agree_no_gps)
+    llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+    where latitude is null and client=1 and status=1;"
+
+    soc_no_gps = "select nom,address,zip,town,client,status from llx_societe_extrafields join \
+    llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+    where latitude is null;"
+    if only_presta:
+        mycursor.execute(presta_agree_no_gps)
+    else:
+        mycursor.execute(soc_no_gps)
+
     return mycursor.fetchall()
 
 def fetch_adress(societe):
@@ -179,10 +190,45 @@ def gen_csv_osm(mydb, mycursor):
                 except UDM_Error as e:
                     print(e.message)
 
+def build_parser():
+    # create the top-level parser
+    parser = argparse.ArgumentParser(prog='manage_dolibarr_db')
+    parser.add_argument('-s', '--status', help='Shows all presta without valid GPS data (true by default)', action="store_true")
+    parser.add_argument('-a', '--show_all', help='Shows all companies without valid GPS data', action="store_true")
+    parser.add_argument('-u', '--update_db_with_gps_info', help='Fetch GPS info for Dolibarr entries without GPS info and update Dolibarr DB for these entries', action="store_true")
+
+    return parser
+
+def manage_default(args):
+    if not args.status and not args.update_db_with_gps_info and not args.show_all:
+        args.status = True
+    return args
+        
+def print_soc(soc_list):
+    if len(soc_list) == 0:
+        print("GPS data valid for all companies")
+    else:
+        print(f"{len(soc_list)} companies without valid GPS data:")
+        for s in soc_list:
+            print(f'{s[0]}')
+
+
 if __name__ == "__main__":
+    p =  build_parser()
+    args = p.parse_args(sys.argv[1:])
+    args = manage_default(args)
     mydb, mycursor = connect_DB()    
-    list_soc = fetch_societe_no_gps(mydb, mycursor)
-    update_gps(list_soc, mydb, mycursor)
+    if args.status:
+        list_soc = fetch_societe_no_gps(mydb, mycursor, only_presta=True)
+        print_soc(list_soc)
+
+    if args.show_all:
+        list_soc = fetch_societe_no_gps(mydb, mycursor, only_presta=False)
+        print_soc(list_soc)
+
+    if args.update_db_with_gps_info:
+        list_soc = fetch_societe_no_gps(mydb, mycursor, only_presta=True)
+        update_gps(list_soc, mydb, mycursor)
 
     
 
