@@ -43,6 +43,10 @@ class dolibarr_DB_manager:
         )
         
         self.mycursor = self.mydb.cursor()
+        self.status = args.status
+        self.show_all = args.show_all
+        self.update_db_with_gps_info = args.update_db_with_gps_info
+        self.interactive_update_db_with_gps_info = args.interactive_update_db_with_gps_info
     
     def fetch_societe_no_gps(self, only_presta):
         sql_request = "select nom,address,zip,town,client,status from llx_societe_extrafields \
@@ -78,7 +82,7 @@ class dolibarr_DB_manager:
             return -1
     
     
-    def fetch_gps_multimatch(self, features, soc, interactive=False):
+    def fetch_gps_multimatch(self, features, soc):
         match = []
         for m in features:
             if soc[3].lower() == m['properties']['city'].lower():
@@ -87,10 +91,10 @@ class dolibarr_DB_manager:
         if len(match) == 0:
             raise UDM_Error("no match", soc)
         elif len(match) > 1:
-            if not interactive:
+            if not self.interactive_update_db_with_gps_info:
                 raise UDM_Error(f"{len(match)} matches", soc, match)
             else:
-                print(f'{len(match)} matches for "{soc[0]}" with address "[soc[1]]" and town "soc[3]"\nPossible match:')
+                print(f'{len(match)} matches for "{soc[0]}" with address "{soc[1]}" and town "{soc[3]}"\nPossible match:')
                 for proposition, val in enumerate(match):
                     print(f'[{proposition}] : {val[1]}')
     
@@ -124,7 +128,7 @@ class dolibarr_DB_manager:
         longitude=%s where nom=%s;"
         val = (gps[1], gps[0], soc[0])
         self.mycursor.execute(update_gps_sql, val)
-        mydb.commit()
+        self.mydb.commit()
         print(self.mycursor.rowcount, "record(s) affected for %s"%soc[0])
     
     def valid_data(self, soc):
@@ -196,6 +200,19 @@ class dolibarr_DB_manager:
                             writer.writerow(p)
                     except UDM_Error as e:
                         print(e.message)
+    def run(self):
+        if self.status:
+            list_soc = self.fetch_societe_no_gps(only_presta=True)
+            self.print_soc(list_soc)
+
+        if self.show_all:
+            list_soc = self.fetch_societe_no_gps(only_presta=False)
+            self.print_soc(list_soc)
+
+        if self.update_db_with_gps_info or self.interactive_update_db_with_gps_info:
+            list_soc = self.fetch_societe_no_gps(only_presta=True)
+            self.update_gps(list_soc)
+
 
 def build_parser():
     # create the top-level parser
@@ -203,11 +220,12 @@ def build_parser():
     parser.add_argument('-s', '--status', help='Shows all presta without valid GPS data (true by default)', action="store_true")
     parser.add_argument('-a', '--show_all', help='Shows all companies without valid GPS data', action="store_true")
     parser.add_argument('-u', '--update_db_with_gps_info', help='Fetch GPS info for Dolibarr entries without GPS info and update Dolibarr DB for these entries', action="store_true")
+    parser.add_argument('-i', '--interactive_update_db_with_gps_info', help='Equivalent to --update_db_with_gps_info but with interactive choice when several matches are available', action="store_true")
 
     return parser
 
 def manage_default(args):
-    if not args.status and not args.update_db_with_gps_info and not args.show_all:
+    if not args.status and not args.update_db_with_gps_info and not args.show_all and not args.update_db_with_gps_info:
         args.status = True
     return args
         
@@ -216,19 +234,8 @@ if __name__ == "__main__":
     p =  build_parser()
     args = p.parse_args(sys.argv[1:])
     args = manage_default(args)
-    self = connect_DB()    
-    if args.status:
-        list_soc = self.fetch_societe_no_gps(self, only_presta=True)
-        self.print_soc(list_soc)
-
-    if args.show_all:
-        list_soc = self.fetch_societe_no_gps(self, only_presta=False)
-        self.print_soc(list_soc)
-
-    if args.update_db_with_gps_info:
-        list_soc = self.fetch_societe_no_gps(self, only_presta=True)
-        self.update_gps(list_soc, self)
-
+    ddbm = dolibarr_DB_manager(args)
+    ddbm.run()
     
 
         

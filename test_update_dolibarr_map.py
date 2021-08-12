@@ -15,10 +15,12 @@ res_aquiu_multi_ok['features'].append(copy.deepcopy(res_aquiu['features'][0]))
 res_aquiu_multi_ok['features'][0]['properties']['city'] = 'Billère'
 
 class fake_args:
-    def __init__(self, status=True, show_all=False, update_db_with_gps_info=False):
+    def __init__(self, status=True, show_all=False, update_db_with_gps_info=False, 
+            interactive_update_db_with_gps_info=False):
         self.status = status
         self.show_all = show_all
         self.update_db_with_gps_info = update_db_with_gps_info
+        self.interactive_update_db_with_gps_info = interactive_update_db_with_gps_info
 
 class test_update_dolibarr_map(unittest.TestCase):
   
