@@ -32,163 +32,170 @@ class UDM_Error(Exception):
         else: 
             return '??'
 
-def connect_DB():
-    password = os.environ['DOLIBARR_DB_PASS']
-    mydb = mysql.connector.connect(
-      host="localhost",
-      user="root",
-      password=password,
-      database="dolibarr"
-    )
-    
-    mycursor = mydb.cursor()
-    return mydb, mycursor
-
-def fetch_societe_no_gps(mydb, mycursor, only_presta=True):
-    presta_agree_no_gps = "select nom,address,zip,town,client,status from llx_societe_extrafields join \
-    llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
-    where latitude is null and client=1 and status=1;"
-
-    soc_no_gps = "select nom,address,zip,town,client,status from llx_societe_extrafields join \
-    llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
-    where latitude is null;"
-    if only_presta:
-        mycursor.execute(presta_agree_no_gps)
-    else:
-        mycursor.execute(soc_no_gps)
-
-    return mycursor.fetchall()
-
-def fetch_adress(societe):
-    payload = {'q' : societe[1], 'postcode': societe[2]}
-    r = requests.get('https://api-adresse.data.gouv.fr/search/', params=payload)
-    return json.loads(r.text)
-
-def convert_choice(choice):
-    try:
-        return int(choice)
-    except ValueError:
-        return -1
-
-
-def fetch_gps_multimatch(features, soc, interactive=False):
-    match = []
-    for m in features:
-        if soc[3].lower() == m['properties']['city'].lower():
-            match.append([m['geometry']['coordinates'], m['properties']['label']])
-
-    if len(match) == 0:
-        raise UDM_Error("no match", soc)
-    elif len(match) > 1:
-        if not interactive:
-            raise UDM_Error(f"{len(match)} matches", soc, match)
-        else:
-            print(f'{len(match)} matches for "{soc[0]}" with address "[soc[1]]" and town "soc[3]"\nPossible match:')
-            for proposition, val in enumerate(match):
-                print(f'[{proposition}] : {val[1]}')
-
-            print(f'[{len(match)}] : none of the proposition is correct')
-            choice = input('Your choice: ')
-            choice_id = convert_choice(choice)
-            if choice_id >=0 and choice_id < len(match):
-                return match[choice_id][0]
-            else:
-                raise UDM_Error("no match", soc)
-    else:
-        return match[0][0]
-
-
-def extract_gps_data(res, soc):
-    if 'features' not in res.keys():
-        raise UDM_Error("request failed", soc)
-    
-    features = res['features']
-    if len(features) == 0:
-        raise UDM_Error("no match", soc)
-    elif len(features)  > 1:
-        return fetch_gps_multimatch(features, soc)
-    else:
-        return features[0]['geometry']['coordinates']
-
-
-def update_dolibarr(mydb, mycursor, soc, gps):
-    update_gps_sql = "update llx_societe_extrafields join llx_societe on \
-    llx_societe_extrafields.fk_object = llx_societe.rowid set latitude=%s, \
-    longitude=%s where nom=%s;"
-    val = (gps[1], gps[0], soc[0])
-    mycursor.execute(update_gps_sql, val)
-    mydb.commit()
-    print(mycursor.rowcount, "record(s) affected for %s"%soc[0])
-
-def valid_data(soc):
-    ok = soc[1] != None and soc[2] != None and soc[3] != None
-    ok = ok and soc[1] != '' and soc[2] != '' and soc[3] != ''
-    if not ok:
-        raise UDM_Error("invalid data", soc)
-
-def update_gps(societe_list, mydb, mycursor):
-    for soc in societe_list:
-        try: 
-            valid_data(soc)
-            res = fetch_adress(soc)
-            gps = extract_gps_data(res, soc)
-            update_dolibarr(mydb, mycursor, soc, gps)
-
-        except UDM_Error as e:
-            print(e.message)
-
-def fetch_categories(mydb, mycursor):
-    categories_sql= "select label from llx_categorie;"
-    mycursor.execute(categories_sql)
-    cat = mycursor.fetchall()
-    res = []
-    for c in cat:
-        if c[0] != "Adresse d'activité" and c[0] != "Etiquettes":
-            res.append(c[0])
-    return res
-
-def valid_gps(presta):
-
-    try:
-        lon = float(presta[4])
-        lat = float(presta[3])
-    except ValueError:
-        raise UDM_Error(f'Gen_csv error: GPS coordinate ({presta[4]},{presta[3]}) not valid for "{presta[0]}" => not in CSV file')
-
-
-    if lon > -2 and lon < 1 and lat > 42 and lat < 44:
-        return True
-    else:
-        raise UDM_Error(f'Gen_csv error: GPS coordinate ({lon},{lat}) not in Bearn for "{presta[0]}" => not in CSV file')
+class dolibarr_DB_manager:
+    def __init__(self, args):
+        password = os.environ['DOLIBARR_DB_PASS']
+        self.mydb = mysql.connector.connect(
+          host="localhost",
+          user="root",
+          password=password,
+          database="dolibarr"
+        )
         
-def csv_filename(category):
-    if category == "Comptoirs d'échanges":
-        name = 'comptoirs'
-    else:
-        name = unidecode.unidecode(category.lower().replace(' ', '_'))
-
-    return f"Prestataires_gps_{name}.csv"
-
-def gen_csv_osm(mydb, mycursor):    
-    presta_with_gps_categorie= "select nom,address,town,latitude,longitude,description_francais from llx_societe_extrafields \
-                                     join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
-                                     join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
-                                     join llx_categorie on llx_categorie.rowid=fk_categorie \
-                                     where latitude is not NULL and client=1 and status=1 and label=%s;"
-
-    for category in fetch_categories(mydb, mycursor):
-        val = (category,)
-        mycursor.execute(presta_with_gps_categorie, val)
-        presta = mycursor.fetchall()
-        with open(csv_filename(category), 'w') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow(("nom","adresse","commune","latitude", "longitude", "description"))
-            for p in presta:
-                try:
-                    if valid_gps(p):
-                        writer.writerow(p)
-                except UDM_Error as e:
-                    print(e.message)
+        self.mycursor = self.mydb.cursor()
+    
+    def fetch_societe_no_gps(self, only_presta):
+        sql_request = "select nom,address,zip,town,client,status from llx_societe_extrafields \
+        join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+        where latitude is null"
+    
+        condition = ''
+        if only_presta:
+            condition = 'and client=1 and status=1'
+        
+        sql_request = f"{sql_request} {condition};"
+        self.mycursor.execute(sql_request)
+    
+        return self.mycursor.fetchall()
+    
+    def print_soc(self, soc_list):
+        if len(soc_list) == 0:
+            print("GPS data valid for all companies")
+        else:
+            print(f"{len(soc_list)} companies without valid GPS data:")
+            for s in soc_list:
+                print(f'{s[0]}')
+    
+    def fetch_adress(self, societe):
+        payload = {'q' : societe[1], 'postcode': societe[2]}
+        r = requests.get('https://api-adresse.data.gouv.fr/search/', params=payload)
+        return json.loads(r.text)
+    
+    def convert_choice(self, choice):
+        try:
+            return int(choice)
+        except ValueError:
+            return -1
+    
+    
+    def fetch_gps_multimatch(self, features, soc, interactive=False):
+        match = []
+        for m in features:
+            if soc[3].lower() == m['properties']['city'].lower():
+                match.append([m['geometry']['coordinates'], m['properties']['label']])
+    
+        if len(match) == 0:
+            raise UDM_Error("no match", soc)
+        elif len(match) > 1:
+            if not interactive:
+                raise UDM_Error(f"{len(match)} matches", soc, match)
+            else:
+                print(f'{len(match)} matches for "{soc[0]}" with address "[soc[1]]" and town "soc[3]"\nPossible match:')
+                for proposition, val in enumerate(match):
+                    print(f'[{proposition}] : {val[1]}')
+    
+                print(f'[{len(match)}] : none of the proposition is correct')
+                choice = input('Your choice: ')
+                choice_id = self.convert_choice(choice)
+                if choice_id >=0 and choice_id < len(match):
+                    return match[choice_id][0]
+                else:
+                    raise UDM_Error("no match", soc)
+        else:
+            return match[0][0]
+    
+    
+    def extract_gps_data(self, res, soc):
+        if 'features' not in res.keys():
+            raise UDM_Error("request failed", soc)
+        
+        features = res['features']
+        if len(features) == 0:
+            raise UDM_Error("no match", soc)
+        elif len(features)  > 1:
+            return self.fetch_gps_multimatch(features, soc)
+        else:
+            return features[0]['geometry']['coordinates']
+    
+    
+    def update_dolibarr(self, soc, gps):
+        update_gps_sql = "update llx_societe_extrafields join llx_societe on \
+        llx_societe_extrafields.fk_object = llx_societe.rowid set latitude=%s, \
+        longitude=%s where nom=%s;"
+        val = (gps[1], gps[0], soc[0])
+        self.mycursor.execute(update_gps_sql, val)
+        mydb.commit()
+        print(self.mycursor.rowcount, "record(s) affected for %s"%soc[0])
+    
+    def valid_data(self, soc):
+        ok = soc[1] != None and soc[2] != None and soc[3] != None
+        ok = ok and soc[1] != '' and soc[2] != '' and soc[3] != ''
+        if not ok:
+            raise UDM_Error("invalid data", soc)
+    
+    def update_gps(self, societe_list):
+        for soc in societe_list:
+            try: 
+                self.valid_data(soc)
+                res = self.fetch_adress(soc)
+                gps = self.extract_gps_data(res, soc)
+                self.update_dolibarr(soc, gps)
+    
+            except UDM_Error as e:
+                print(e.message)
+    
+    def fetch_categories(self):
+        categories_sql= "select label from llx_categorie;"
+        self.mycursor.execute(categories_sql)
+        cat = self.mycursor.fetchall()
+        res = []
+        for c in cat:
+            if c[0] != "Adresse d'activité" and c[0] != "Etiquettes" and c[0] != 'Frestaurant':  #TODO remove category 'Frestaurant'
+                res.append(c[0])
+        return res
+    
+    def valid_gps(self, presta):
+    
+        try:
+            lon = float(presta[4])
+            lat = float(presta[3])
+        except ValueError:
+            raise UDM_Error(f'Gen_csv error: GPS coordinate ({presta[4]},{presta[3]}) not valid for "{presta[0]}" => not in CSV file')
+    
+    
+        if lon > -2 and lon < 1 and lat > 42 and lat < 44:
+            return True
+        else:
+            raise UDM_Error(f'Gen_csv error: GPS coordinate ({lon},{lat}) not in Bearn for "{presta[0]}" => not in CSV file')
+            
+    def csv_filename(self, category):
+        if category == "Comptoirs d'échanges":
+            name = 'comptoirs'
+        else:
+            name = unidecode.unidecode(category.lower().replace(' ', '_'))
+    
+        return f"Prestataires_gps_{name}.csv"
+    
+    def gen_csv_osm(self):    
+        presta_with_gps_categorie= "select nom,address,town,latitude,longitude,description_francais from llx_societe_extrafields \
+                                         join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+                                         join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
+                                         join llx_categorie on llx_categorie.rowid=fk_categorie \
+                                         where latitude is not NULL and client=1 and status=1 and label=%s;"
+    
+        for category in self.fetch_categories():
+            val = (category,)
+            self.mycursor.execute(presta_with_gps_categorie, val)
+            presta = self.mycursor.fetchall()
+            with open(self.csv_filename(category), 'w') as csvfile:
+                writer = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                writer.writerow(("nom","adresse","commune","latitude", "longitude", "description"))
+                for p in presta:
+                    try:
+                        if self.valid_gps(p):
+                            writer.writerow(p)
+                    except UDM_Error as e:
+                        print(e.message)
 
 def build_parser():
     # create the top-level parser
@@ -204,31 +211,23 @@ def manage_default(args):
         args.status = True
     return args
         
-def print_soc(soc_list):
-    if len(soc_list) == 0:
-        print("GPS data valid for all companies")
-    else:
-        print(f"{len(soc_list)} companies without valid GPS data:")
-        for s in soc_list:
-            print(f'{s[0]}')
-
 
 if __name__ == "__main__":
     p =  build_parser()
     args = p.parse_args(sys.argv[1:])
     args = manage_default(args)
-    mydb, mycursor = connect_DB()    
+    self = connect_DB()    
     if args.status:
-        list_soc = fetch_societe_no_gps(mydb, mycursor, only_presta=True)
-        print_soc(list_soc)
+        list_soc = self.fetch_societe_no_gps(self, only_presta=True)
+        self.print_soc(list_soc)
 
     if args.show_all:
-        list_soc = fetch_societe_no_gps(mydb, mycursor, only_presta=False)
-        print_soc(list_soc)
+        list_soc = self.fetch_societe_no_gps(self, only_presta=False)
+        self.print_soc(list_soc)
 
     if args.update_db_with_gps_info:
-        list_soc = fetch_societe_no_gps(mydb, mycursor, only_presta=True)
-        update_gps(list_soc, mydb, mycursor)
+        list_soc = self.fetch_societe_no_gps(self, only_presta=True)
+        self.update_gps(list_soc, self)
 
     
 
