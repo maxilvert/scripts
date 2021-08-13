@@ -122,9 +122,10 @@ class dolibarr_DB_manager:
         if dry_run:
             print(f'{soc[0]} could be updated with ({gps[1]},{gps[0]})')
         else:
-            update_gps_sql = "update llx_societe_extrafields join llx_societe on \
-            llx_societe_extrafields.fk_object = llx_societe.rowid set latitude=%s, \
-            longitude=%s where nom=%s;"
+            update_gps_sql = "update llx_societe_extrafields \
+            join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+            set latitude=%s, longitude=%s \
+            where nom=%s;"
             val = (gps[1], gps[0], soc[0])
             self.mycursor.execute(update_gps_sql, val)
             self.mydb.commit()
@@ -171,15 +172,15 @@ class dolibarr_DB_manager:
         else:
             raise UDM_Error(f'Gen_csv error: GPS coordinate ({lon},{lat}) not in Bearn for "{presta[0]}" => not in CSV file')
             
-    def csv_filename(self, category):
+    def csv_filename(self, basename, ext, category):
         if category == "Comptoirs d'échanges":
             name = 'comptoirs'
         else:
             name = unidecode.unidecode(category.lower().replace(' ', '_'))
     
-        return f"Prestataires_gps_{name}.csv"
+        return f"{basename}_{name}.{ext}"
     
-    def gen_csv_osm(self):    
+    def gen_csv_osm(self, basename):    
         presta_with_gps_categorie= "select nom,address,town,latitude,longitude,description_francais from llx_societe_extrafields \
                                          join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
                                          join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
@@ -190,7 +191,7 @@ class dolibarr_DB_manager:
             val = (category,)
             self.mycursor.execute(presta_with_gps_categorie, val)
             presta = self.mycursor.fetchall()
-            with open(self.csv_filename(category), 'w') as csvfile:
+            with open(self.csv_filename(basename, 'csv', category), 'w') as csvfile:
                 writer = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
                 writer.writerow(("nom","adresse","commune","latitude", "longitude", "description"))
                 for p in presta:
@@ -202,6 +203,11 @@ class dolibarr_DB_manager:
 
 def export(args):
     ddbm = dolibarr_DB_manager()
+    if args.format == 'csv':
+        ddbm.gen_csv_osm(args.output)
+    elif args.format == 'json':
+        pass
+
 
 def update(args):
     ddbm = dolibarr_DB_manager()
@@ -225,7 +231,7 @@ def build_parser():
     # create the parser for the "export" command
     parser_export = subparsers.add_parser('export', help='Export data from the Dolibarr DB')
     parser_export.add_argument('-f', '--format', type=str, default="json", choices=['json', 'csv'], help='Format of the file generated (default json)')
-    parser_export.add_argument('-o', '--output', type=str, default="presta_gps.json", help='Filename for the data exported (default presta_gps.json)')
+    parser_export.add_argument('-o', '--output', type=str, default="presta_gps", help='Filename for the data exported (default presta_gps)')
     parser_export.set_defaults(func=export)
 
     # create the parser for the "update" command
