@@ -33,7 +33,7 @@ class UDM_Error(Exception):
             return '??'
 
 class dolibarr_DB_manager:
-    def __init__(self, args):
+    def __init__(self):
         password = os.environ['DOLIBARR_DB_PASS']
         self.mydb = mysql.connector.connect(
           host="localhost",
@@ -43,10 +43,6 @@ class dolibarr_DB_manager:
         )
         
         self.mycursor = self.mydb.cursor()
-        self.status = args.status
-        self.show_all = args.show_all
-        self.update_db_with_gps_info = args.update_db_with_gps_info
-        self.interactive_update_db_with_gps_info = args.interactive_update_db_with_gps_info
     
     def fetch_societe_no_gps(self, only_presta):
         sql_request = "select nom,address,zip,town,client,status from llx_societe_extrafields \
@@ -82,7 +78,7 @@ class dolibarr_DB_manager:
             return -1
     
     
-    def fetch_gps_multimatch(self, features, soc):
+    def fetch_gps_multimatch(self, features, soc, interactive):
         match = []
         for m in features:
             if soc[3].lower() == m['properties']['city'].lower():
@@ -91,7 +87,7 @@ class dolibarr_DB_manager:
         if len(match) == 0:
             raise UDM_Error("no match", soc)
         elif len(match) > 1:
-            if not self.interactive_update_db_with_gps_info:
+            if not interactive:
                 raise UDM_Error(f"{len(match)} matches", soc, match)
             else:
                 print(f'{len(match)} matches for "{soc[0]}" with address "{soc[1]}" and town "{soc[3]}"\nPossible match:')
@@ -109,7 +105,7 @@ class dolibarr_DB_manager:
             return match[0][0]
     
     
-    def extract_gps_data(self, res, soc):
+    def extract_gps_data(self, res, soc, interactive=False):
         if 'features' not in res.keys():
             raise UDM_Error("request failed", soc)
         
@@ -117,19 +113,22 @@ class dolibarr_DB_manager:
         if len(features) == 0:
             raise UDM_Error("no match", soc)
         elif len(features)  > 1:
-            return self.fetch_gps_multimatch(features, soc)
+            return self.fetch_gps_multimatch(features, soc, interactive)
         else:
             return features[0]['geometry']['coordinates']
     
     
-    def update_dolibarr(self, soc, gps):
-        update_gps_sql = "update llx_societe_extrafields join llx_societe on \
-        llx_societe_extrafields.fk_object = llx_societe.rowid set latitude=%s, \
-        longitude=%s where nom=%s;"
-        val = (gps[1], gps[0], soc[0])
-        self.mycursor.execute(update_gps_sql, val)
-        self.mydb.commit()
-        print(self.mycursor.rowcount, "record(s) affected for %s"%soc[0])
+    def update_dolibarr(self, soc, gps, dry_run):
+        if dry_run:
+            print(f'{soc[0]} could be updated with ({gps[1]},{gps[0]})')
+        else:
+            update_gps_sql = "update llx_societe_extrafields join llx_societe on \
+            llx_societe_extrafields.fk_object = llx_societe.rowid set latitude=%s, \
+            longitude=%s where nom=%s;"
+            val = (gps[1], gps[0], soc[0])
+            self.mycursor.execute(update_gps_sql, val)
+            self.mydb.commit()
+            print(f"{self.mycursor.rowcount} record(s) affected. {soc[0]} updated with ({gps[1]},{gps[0]})")
     
     def valid_data(self, soc):
         ok = soc[1] != None and soc[2] != None and soc[3] != None
@@ -137,13 +136,13 @@ class dolibarr_DB_manager:
         if not ok:
             raise UDM_Error("invalid data", soc)
     
-    def update_gps(self, societe_list):
+    def update_gps(self, args, societe_list):
         for soc in societe_list:
             try: 
                 self.valid_data(soc)
                 res = self.fetch_adress(soc)
-                gps = self.extract_gps_data(res, soc)
-                self.update_dolibarr(soc, gps)
+                gps = self.extract_gps_data(res, soc, args.interactive)
+                self.update_dolibarr(soc, gps, args.dry_run)
     
             except UDM_Error as e:
                 print(e.message)
@@ -200,42 +199,48 @@ class dolibarr_DB_manager:
                             writer.writerow(p)
                     except UDM_Error as e:
                         print(e.message)
-    def run(self):
-        if self.status:
-            list_soc = self.fetch_societe_no_gps(only_presta=True)
-            self.print_soc(list_soc)
 
-        if self.show_all:
-            list_soc = self.fetch_societe_no_gps(only_presta=False)
-            self.print_soc(list_soc)
+def export(args):
+    ddbm = dolibarr_DB_manager()
 
-        if self.update_db_with_gps_info or self.interactive_update_db_with_gps_info:
-            list_soc = self.fetch_societe_no_gps(only_presta=True)
-            self.update_gps(list_soc)
+def update(args):
+    ddbm = dolibarr_DB_manager()
+    list_soc = ddbm.fetch_societe_no_gps(only_presta=True)
+    ddbm.update_gps(args, list_soc)
 
+def status(args):
+    ddbm = dolibarr_DB_manager()
+    list_soc = ddbm.fetch_societe_no_gps(only_presta= not args.show_all)
+    ddbm.print_soc(list_soc)
 
 def build_parser():
     # create the top-level parser
     parser = argparse.ArgumentParser(prog='manage_dolibarr_db')
-    parser.add_argument('-s', '--status', help='Shows all presta without valid GPS data (true by default)', action="store_true")
-    parser.add_argument('-a', '--show_all', help='Shows all companies without valid GPS data', action="store_true")
-    parser.add_argument('-u', '--update_db_with_gps_info', help='Fetch GPS info for Dolibarr entries without GPS info and update Dolibarr DB for these entries', action="store_true")
-    parser.add_argument('-i', '--interactive_update_db_with_gps_info', help='Equivalent to --update_db_with_gps_info but with interactive choice when several matches are available', action="store_true")
+    subparsers = parser.add_subparsers(help='sub-command help')
+    # create the parser for the "status" command
+    parser_status = subparsers.add_parser('status', help='Shows all companies (only presta by default) with no valid GPS data')
+    parser_status.add_argument('-a', '--show_all', help='Shows all companies without valid GPS data', action="store_true")
+    parser_status.set_defaults(func=status)
+
+    # create the parser for the "export" command
+    parser_export = subparsers.add_parser('export', help='Export data from the Dolibarr DB')
+    parser_export.add_argument('-f', '--format', type=str, default="json", choices=['json', 'csv'], help='Format of the file generated (default json)')
+    parser_export.add_argument('-o', '--output', type=str, default="presta_gps.json", help='Filename for the data exported (default presta_gps.json)')
+    parser_export.set_defaults(func=export)
+
+    # create the parser for the "update" command
+    parser_update = subparsers.add_parser('update', help='Update the Dolibarr DB with GPS info')
+    parser_update.add_argument('-i', '--interactive', help='Equivalent to --update_db_with_gps_info but with interactive choice when several matches are available', action="store_true")
+    parser_update.add_argument('-d', '--dry_run', help='Shows all modifications that would be committed but dolibarr DB remains untouched', action="store_true")
+    parser_update.set_defaults(func=update)
+
 
     return parser
-
-def manage_default(args):
-    if not args.status and not args.update_db_with_gps_info and not args.show_all and not args.update_db_with_gps_info:
-        args.status = True
-    return args
-        
 
 if __name__ == "__main__":
     p =  build_parser()
     args = p.parse_args(sys.argv[1:])
-    args = manage_default(args)
-    ddbm = dolibarr_DB_manager(args)
-    ddbm.run()
+    args.func(args)
     
 
         
