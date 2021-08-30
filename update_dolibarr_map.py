@@ -7,6 +7,7 @@ import os
 import unidecode
 import argparse
 import sys
+import re
 
 class UDM_Error(Exception):
     def __init__(self, message, societe=None, match=None):
@@ -43,6 +44,7 @@ class dolibarr_DB_manager:
         )
         
         self.mycursor = self.mydb.cursor()
+        self.url_re = re.compile('((https?:\/\/)?(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})')
     
     def fetch_societe_no_gps(self, only_presta):
         sql_request = "select nom,address,zip,town,client,status from llx_societe_extrafields \
@@ -172,6 +174,26 @@ class dolibarr_DB_manager:
         else:
             raise UDM_Error(f'Gen_csv error: GPS coordinate ({lon},{lat}) not in Bearn for "{presta[0]}" => not in CSV file')
             
+    def improve_url(self, url, presta):
+        if url is None:
+            return None
+
+        res = self.url_re.search(url)
+        
+        
+        if res is None:
+            print(f'Warning: URL "{url}" not valid for "{presta}" setting it to null')
+            return None
+        #else:
+        #    print(f'URL {url} ok for "{presta}", {res}')
+
+
+
+        if 'http://' in url or 'https://' in url:
+            return url
+        else:
+            return 'http://' + url
+
     def csv_filename(self, basename, ext, category):
         if category == "Comptoirs d'échanges":
             name = 'comptoirs'
@@ -181,7 +203,7 @@ class dolibarr_DB_manager:
         return f"{basename}_{name}.{ext}"
     
     def gen_csv_osm(self, basename):    
-        presta_with_gps_categorie= "select nom,address,town,latitude,longitude,description_francais from llx_societe_extrafields \
+        presta_with_gps_categorie_sql = "select nom,address,town,latitude,longitude,description_francais,url from llx_societe_extrafields \
                                          join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
                                          join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
                                          join llx_categorie on llx_categorie.rowid=fk_categorie \
@@ -189,24 +211,70 @@ class dolibarr_DB_manager:
     
         for category in self.fetch_categories():
             val = (category,)
-            self.mycursor.execute(presta_with_gps_categorie, val)
+            self.mycursor.execute(presta_with_gps_categorie_sql, val)
             presta = self.mycursor.fetchall()
             with open(self.csv_filename(basename, 'csv', category), 'w') as csvfile:
                 writer = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                writer.writerow(("nom","adresse","commune","latitude", "longitude", "description"))
+                writer.writerow(("nom","adresse","commune","latitude", "longitude", "description", "url"))
                 for p in presta:
                     try:
                         if self.valid_gps(p):
-                            writer.writerow(p)
+                            plist = list(p)
+                            plist[6] = self.improve_url(plist[6], plist[0])
+                            writer.writerow(plist)
                     except UDM_Error as e:
                         print(e.message)
+
+    def gen_json_gogo(self, basename):    
+        presta_with_gps_sql = "select nom,address,town,latitude,longitude,description_francais,url from llx_societe_extrafields \
+                                         join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+                                         where latitude is not NULL and client=1 and status=1;"
+    
+        category_sql = "select label from llx_societe \
+                           join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
+                           join llx_categorie on llx_categorie.rowid=fk_categorie \
+                           where nom=%s;"
+
+        self.mycursor.execute(presta_with_gps_sql)
+        presta = self.mycursor.fetchall()
+        all_presta = []
+        for p in presta:
+
+            self.mycursor.execute(category_sql, (p[0],))
+            category = self.mycursor.fetchall()
+            if category == []:
+                print(f'Warning: no category for presta "{p[0]}"')
+            try:
+                if self.valid_gps(p):
+                    to_add = {}
+                    to_add['id'] = p[0]
+                    to_add['address'] = p[1] 
+                    to_add['town'] = p[2] 
+                    to_add['latitude'] = p[3]
+                    to_add['longitude'] = p[4]
+                    to_add['description'] = p[5]
+                    to_add['url'] = self.improve_url(p[6], p[0])
+                    to_add['category'] = [cat[0] for cat in category]
+                    all_presta.append(to_add)
+            except UDM_Error as e:
+                print(e.message)
+        json_dict = {}
+        json_dict['license'] = 'To be determined'
+        json_dict['source'] = 'De Main en Main Dolibarr database'
+        json_dict['network'] = all_presta
+
+        with open(basename + '.json', 'w') as json_file:
+            json_file.write(json.dumps(json_dict, ensure_ascii=False))
+
+
+
 
 def export(args):
     ddbm = dolibarr_DB_manager()
     if args.format == 'csv':
         ddbm.gen_csv_osm(args.output)
     elif args.format == 'json':
-        pass
+        ddbm.gen_json_gogo(args.output)
 
 
 def update(args):
@@ -231,7 +299,7 @@ def build_parser():
     # create the parser for the "export" command
     parser_export = subparsers.add_parser('export', help='Export data from the Dolibarr DB')
     parser_export.add_argument('-f', '--format', type=str, default="json", choices=['json', 'csv'], help='Format of the file generated (default json)')
-    parser_export.add_argument('-o', '--output', type=str, default="presta_gps", help='Filename for the data exported (default presta_gps)')
+    parser_export.add_argument('-o', '--output', type=str, default="Prestataires_gps", help='Filename for the data exported (default Prestataires_gps)')
     parser_export.set_defaults(func=export)
 
     # create the parser for the "update" command
@@ -245,8 +313,14 @@ def build_parser():
 
 if __name__ == "__main__":
     p =  build_parser()
+    if len(sys.argv[1:]) == 0:
+        p.print_help(sys.stderr)
+        sys.exit(1)
+    
     args = p.parse_args(sys.argv[1:])
-    args.func(args)
+    if args.func != None:
+        args.func(args)
+
     
 
         
