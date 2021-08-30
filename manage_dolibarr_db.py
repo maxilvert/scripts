@@ -194,13 +194,13 @@ class dolibarr_DB_manager:
         else:
             return 'http://' + url
 
-    def csv_filename(self, basename, ext, category):
+    def csv_filename(self, basename, category):
         if category == "Comptoirs d'échanges":
             name = 'comptoirs'
         else:
             name = unidecode.unidecode(category.lower().replace(' ', '_'))
     
-        return f"{basename}_{name}.{ext}"
+        return f"{basename}_{name}.csv"
     
     def gen_csv_osm(self, basename):    
         presta_with_gps_categorie_sql = "select nom,address,town,latitude,longitude,description_francais,url from llx_societe_extrafields \
@@ -213,7 +213,7 @@ class dolibarr_DB_manager:
             val = (category,)
             self.mycursor.execute(presta_with_gps_categorie_sql, val)
             presta = self.mycursor.fetchall()
-            with open(self.csv_filename(basename, 'csv', category), 'w') as csvfile:
+            with open(self.csv_filename(basename, category), 'w') as csvfile:
                 writer = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
                 writer.writerow(("nom","adresse","commune","latitude", "longitude", "description", "url"))
                 for p in presta:

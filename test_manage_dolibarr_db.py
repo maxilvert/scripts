@@ -3,7 +3,7 @@ import sys
 import copy
 from pprint import pprint
 
-import update_dolibarr_map as udm
+import manage_dolibarr_db as mddb
 
 dmem = ('De Main en Main', 'Villa des violettes, impasse Odeau', 'Billère', 43.3022, -0.39749, "Association porteuse de la Monnaie Locale Complémentaire du Béarn, la T!nda. Comptoir d'échange sur événement ou sur rendez-vous (téléphoner).")
 
@@ -14,24 +14,14 @@ res_aquiu_multi_ok = copy.deepcopy(res_aquiu)
 res_aquiu_multi_ok['features'].append(copy.deepcopy(res_aquiu['features'][0])) 
 res_aquiu_multi_ok['features'][0]['properties']['city'] = 'Billère'
 
-class fake_args:
-    def __init__(self, status=True, show_all=False, update_db_with_gps_info=False, 
-            interactive_update_db_with_gps_info=False):
-        self.status = status
-        self.show_all = show_all
-        self.update_db_with_gps_info = update_db_with_gps_info
-        self.interactive_update_db_with_gps_info = interactive_update_db_with_gps_info
-
 class test_update_dolibarr_map(unittest.TestCase):
   
     def test_db_connection(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         self.assertTrue(ddbm.mydb is not None and ddbm.mycursor is not None,  'Connection issue with Dolibarr database')
       
     def test_fetch_categories(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         res = ddbm.fetch_categories()
         expected = ['Agriculture', 'Alimentation', 'Art et culture', 'Artisanat',
                 'Associations', 'Autre', 'Commerce', "Comptoirs d'échanges", 
@@ -41,56 +31,53 @@ class test_update_dolibarr_map(unittest.TestCase):
             self.assertTrue(res==expected,  f'{res}\ndifferent from\n{expected}')
       
     def test_valid_gps_1(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(dmem)
         inputs[3] = 'lol'
-        with self.assertRaises(udm.UDM_Error) as context:
+        with self.assertRaises(mddb.UDM_Error) as context:
             ddbm.valid_gps(inputs)
   
         self.assertTrue(f'Gen_csv error: GPS coordinate ({inputs[4]},{inputs[3]}) not valid for "{inputs[0]}" => not in CSV file' in str(context.exception))
     
     def test_valid_gps_2(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(dmem)
         inputs[3] = '49.3'
-        with self.assertRaises(udm.UDM_Error) as context:
+        with self.assertRaises(mddb.UDM_Error) as context:
             ddbm.valid_gps(inputs)
   
         self.assertTrue(f'Gen_csv error: GPS coordinate ({inputs[4]},{inputs[3]}) not in Bearn for "{inputs[0]}" => not in CSV file' in str(context.exception))
   
     def test_valid_gps_3(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(dmem)
         res = ddbm.valid_gps(inputs)
   
         self.assertTrue(res == True, f'GPS data not valid for {inputs}')
     
     def test_csv_name_1(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = "Comptoirs d'échanges"
         name = 'comptoirs'
-        expected = f"Prestataires_gps_{name}.csv"
-        res = ddbm.csv_filename(inputs)
+        basename = "Prestataires_gps"
+        expected = f"{basename}_{name}.csv"
+        res = ddbm.csv_filename(basename, inputs)
   
         self.assertTrue(res == expected, f'"{expected}" was expected, got "{res}" for input "{inputs}"')
     
     def test_csv_name_2(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = "Art et culture"
         name = 'art_et_culture'
-        expected = f"Prestataires_gps_{name}.csv"
-        res = ddbm.csv_filename(inputs)
+        basename = "Prestataires_gps"
+        expected = f"{basename}_{name}.csv"
+        res = ddbm.csv_filename(basename, inputs)
   
         self.assertTrue(res == expected, f'"{expected}" was expected, got "{res}" for input "{inputs}"')
     
     #def test_fetch_adress(self):
     #    inputs = list(aquiu)
-    #    res = udm.fetch_adress(inputs)
+    #    res = mddb.fetch_adress(inputs)
   
     #    self.assertTrue(res == res_aquiu, f'data fetched {res} not corresponding to expeceted {res_aquiu}')
     
@@ -106,33 +93,30 @@ class test_update_dolibarr_map(unittest.TestCase):
   
   
     def test_extract_gps_data_fail(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(aquiu)
         expected = self.gen_UDM_Error_message(inputs, 'request failed')
         
-        with self.assertRaises(udm.UDM_Error) as context:
+        with self.assertRaises(mddb.UDM_Error) as context:
             ddbm.extract_gps_data({}, inputs)
         
         self.assertTrue(expected == context.exception.message)
   
     def test_extract_gps_data_nomatch(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(aquiu)
         res_aquiu_nomatch = copy.deepcopy(res_aquiu)
         res_aquiu_nomatch['features'] = []
   
         expected = self.gen_UDM_Error_message(inputs, 'no match')
   
-        with self.assertRaises(udm.UDM_Error) as context:
+        with self.assertRaises(mddb.UDM_Error) as context:
             ddbm.extract_gps_data(res_aquiu_nomatch, inputs)
   
         self.assertTrue(expected == context.exception.message)
   
     def test_extract_gps_data_ok(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(aquiu)
         expected = [-0.369283, 43.301366]
         res = ddbm.extract_gps_data(res_aquiu, inputs)
@@ -140,37 +124,34 @@ class test_update_dolibarr_map(unittest.TestCase):
         self.assertTrue(expected == res, f'"{expected}" was expected, got "{res}" for input "{inputs}"')
   
     def test_fetch_gps_multimatch_nomatch(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(aquiu)
         res_aquiu_multi_nomatch = copy.deepcopy(res_aquiu_multi_ok)
         res_aquiu_multi_nomatch['features'][1]['properties']['city'] = 'Lons'
         expected = self.gen_UDM_Error_message(inputs, 'no match')
   
-        with self.assertRaises(udm.UDM_Error) as context:
-            ddbm.fetch_gps_multimatch(res_aquiu_multi_nomatch['features'], inputs)
+        with self.assertRaises(mddb.UDM_Error) as context:
+            ddbm.fetch_gps_multimatch(res_aquiu_multi_nomatch['features'], inputs, False)
   
         self.assertTrue(expected == context.exception.message, f'"{expected}" was expected, got "{context.exception.message}" for input "{inputs}"')
   
     def test_fetch_gps_multimatch_multimatch(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(aquiu)
         res_aquiu_multi_multimatch = copy.deepcopy(res_aquiu_multi_ok)
         res_aquiu_multi_multimatch['features'][0]['properties']['city'] = 'Pau'
         expected = self.gen_UDM_Error_message(inputs, '2 matches', res_aquiu_multi_multimatch['features'])
   
-        with self.assertRaises(udm.UDM_Error) as context:
-            ddbm.fetch_gps_multimatch(res_aquiu_multi_multimatch['features'], inputs)
+        with self.assertRaises(mddb.UDM_Error) as context:
+            ddbm.fetch_gps_multimatch(res_aquiu_multi_multimatch['features'], inputs, False)
   
         self.assertTrue(expected == context.exception.message, f'"{expected}" was expected, got "{context.exception.message}" for input "{inputs}"')
   
     def test_fetch_gps_multimatch_ok(self):
-        args = fake_args()
-        ddbm = udm.dolibarr_DB_manager(args)
+        ddbm = mddb.dolibarr_DB_manager()
         inputs = list(aquiu)
         expected = [-0.369283, 43.301366]
-        res = ddbm.fetch_gps_multimatch(res_aquiu_multi_ok['features'], inputs)
+        res = ddbm.fetch_gps_multimatch(res_aquiu_multi_ok['features'], inputs, False)
   
         self.assertTrue(expected == res, f'"{expected}" was expected, got "{res}" for input "{inputs}"')
 
