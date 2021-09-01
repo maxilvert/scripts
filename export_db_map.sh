@@ -1,7 +1,7 @@
 PUBLIC_HTML=/var/www/html
 MDDB_DIR=$HOME/scripts
 DATE=$(date +%Y-%m-%d)
-source $MDDB_DIR/dolibarr_db_pass.sh
+. $MDDB_DIR/dolibarr_db_pass.sh
 
 mkdir -p $PUBLIC_HTML/$DATE
 cd $PUBLIC_HTML/$DATE
