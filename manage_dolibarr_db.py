@@ -182,12 +182,8 @@ class dolibarr_DB_manager:
         
         
         if res is None:
-            print(f'Warning: URL "{url}" not valid for "{presta}" setting it to null')
-            return None
-        #else:
-        #    print(f'URL {url} ok for "{presta}", {res}')
-
-
+            print(f'Warning: URL "{url}" not valid for "{presta}" setting it to "no_url"')
+            return 'no_url'
 
         if 'http://' in url or 'https://' in url:
             return url
@@ -266,7 +262,125 @@ class dolibarr_DB_manager:
         with open(basename + '.json', 'w') as json_file:
             json_file.write(json.dumps(json_dict, ensure_ascii=False))
 
+    def latexify(self, str_in):
+        str_out = str_in.replace('&', '\\&')
+        str_out = str_out.replace('«', '\\og{}')
+        str_out = str_out.replace('»', '\\fg{}')
+        str_out = str_out.replace('<', '\\textlesser')
+        str_out = str_out.replace('>', '\\textgreater')
+        str_out = str_out.replace('%', '\\%')
 
+        return str_out
+
+    def flatten_category(self, category):
+        return [c[0] for c in category]
+
+    def format_phone(self, phone):
+        num = phone.split()
+        phone_out = ' '.join(num)
+        if len(phone_out) == 10:
+            out = ''
+            for i in range(2,11,2):
+                out += phone_out[i-2:i] + ' '
+            phone_out = out
+
+        return phone_out
+
+    def category_txt(self, category):
+        if category == []:
+            return ''
+        else:
+            cat = category[0]
+            for c in category[1:]:
+                if c != "Comptoirs d'échanges":
+                    cat += ', ' + c
+            return cat
+
+    def presta_tex(self, p, category, comptoir_only):
+        to_print = '\\makecell*[{{p{\\nameWidth}}}]{\n'
+
+        to_print += '\\textbf{%s} (%s)\\\\\n'%(self.latexify(p[0]), self.category_txt(category))
+        if "Comptoirs d'échanges" in category and not comptoir_only: 
+            to_print += "\\colorbox{colorComptoir}{\\textbf{Comptoirs d'échanges}}\\\\\n"
+        if p[3] is not None and p[3] != '':
+            to_print += '%s\n'%(self.latexify(p[3]))
+        to_print += '}\n&\n'
+        to_print += '\\makecell*[{{p{\\dataWidth}}}]{\n'
+        if p[1] is not None:
+            to_print += '%s, '%(p[1])
+        to_print += '%s\\\\\n'%(p[2])
+        if p[5] is not None:
+            to_print += '%s\\\\\n'%(self.format_phone(p[5]))
+        if p[4] is not None and p[4] != '':
+            to_print += '{\\small \\url{%s}}\n'%(self.latexify(self.improve_url(p[4], p[0])))
+        to_print += '}\n\\\\\n\\hline\n'
+        return to_print
+
+    def gen_tex_alpha(self, basename):    
+        presta_sql = "select nom,address,town,description_francais,url,phone from llx_societe_extrafields \
+                                         join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+                                         where client=1 and status=1\
+                                         order by nom;"
+    
+        category_sql = "select label from llx_societe \
+                           join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
+                           join llx_categorie on llx_categorie.rowid=fk_categorie \
+                           where nom=%s;"
+
+        self.mycursor.execute(presta_sql)
+        presta = self.mycursor.fetchall()
+        to_print = ''
+        for p in presta:
+            self.mycursor.execute(category_sql, (p[0],))
+            category = self.flatten_category(self.mycursor.fetchall())
+            to_print += self.presta_tex(p, category, comptoir_only=False)
+
+        with open(basename + '_alpha.tex', 'w') as tex_file:
+            tex_file.write(to_print)
+
+    def gen_tex_category(self, basename, comptoir_only=True):    
+        presta_sql = "select nom,address,town,description_francais,url,phone from llx_societe_extrafields \
+                                         join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
+                                         join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
+                                         join llx_categorie on llx_categorie.rowid=fk_categorie \
+                                         where client=1 and status=1 and label=%s\
+                                         order by nom;"
+    
+        category_sql = "select label from llx_societe \
+                           join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
+                           join llx_categorie on llx_categorie.rowid=fk_categorie \
+                           where nom=%s;"
+
+        if comptoir_only:
+            category = ["Comptoirs d'échanges"]
+            fname = basename + '_comptoir.tex'
+        else:
+            category = self.fetch_categories()
+            category.remove("Comptoirs d'échanges")
+            fname = basename + '_category.tex'
+
+        to_print = ''
+        for cat in category:
+            self.mycursor.execute(presta_sql, (cat,))
+            presta = self.mycursor.fetchall()
+            if len(presta) > 0:
+                to_print += '{\\Large %s}\n'%(cat)
+                to_print += '\\begin{longtable}{|m{\\nameWidth} | m{\\dataWidth}|}\n\\hline\nNom & Coordonnées  \\\\\n\\hline\n\\endhead\n'
+    
+                for p in presta:
+                    self.mycursor.execute(category_sql, (p[0],))
+                    category = self.flatten_category(self.mycursor.fetchall())
+                    to_print += self.presta_tex(p, category, comptoir_only)
+                to_print += '\\end{longtable}\n\n'
+    
+        with open(fname, 'w') as tex_file:
+            tex_file.write(to_print)
+
+
+    def gen_tex_gogo(self, basename):    
+        self.gen_tex_alpha(basename)
+        self.gen_tex_category(basename)
+        self.gen_tex_category(basename, comptoir_only=False)
 
 
 def export(args):
@@ -275,6 +389,8 @@ def export(args):
         ddbm.gen_csv_osm(args.output)
     elif args.format == 'json':
         ddbm.gen_json_gogo(args.output)
+    elif args.format == 'tex':
+        ddbm.gen_tex_gogo(args.output)
 
 
 def update(args):
@@ -298,7 +414,7 @@ def build_parser():
 
     # create the parser for the "export" command
     parser_export = subparsers.add_parser('export', help='Export data from the Dolibarr DB')
-    parser_export.add_argument('-f', '--format', type=str, default="json", choices=['json', 'csv'], help='Format of the file generated (default json)')
+    parser_export.add_argument('-f', '--format', type=str, default="json", choices=['json', 'csv', 'tex'], help='Format of the file generated (default json)')
     parser_export.add_argument('-o', '--output', type=str, default="Prestataires_gps", help='Filename for the data exported (default Prestataires_gps)')
     parser_export.set_defaults(func=export)
 
