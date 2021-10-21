@@ -1,0 +1,35 @@
+
+\documentclass{article}
+\usepackage{geometry}
+
+\geometry{a4paper, margin=.5cm}
+\usepackage[frenchb]{babel}
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{multicol}
+\definecolor{colorComptoir}{RGB}{253,215,114}
+\newcommand{\nameWidth}{13cm}
+\newcommand{\dataWidth}{6cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    }
+    \setlength{\footskip}{0pt}
+\begin{document}
+
+\input{page_garde.tex}
+\pagebreak
+
+  \begin{center}
+\input{presta_comptoir.tex}
+
+\pagebreak
+
+  \input{presta_category.tex}
+  \end{center}
+\end{document}

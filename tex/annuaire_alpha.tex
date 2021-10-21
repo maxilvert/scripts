@@ -1,0 +1,43 @@
+
+\documentclass{article}
+\usepackage{geometry}
+
+\geometry{a4paper, margin=0.5cm}
+\usepackage[frenchb]{babel}
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{multicol}
+\definecolor{colorComptoir}{RGB}{253,215,114}
+\newcommand{\nameWidth}{13cm}
+\newcommand{\dataWidth}{6cm}
+\setlength{\footskip}{0pt}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    }
+\begin{document}
+
+\input{page_garde.tex}
+\pagebreak
+
+  \begin{center}
+\input{presta_comptoir.tex}
+
+\pagebreak
+
+    {\Large Les prestataires du réseau par ordre alphabétique}
+    \begin{longtable}{|m{\nameWidth} | m{\dataWidth}|}
+      \hline
+      Nom & Coordonnées  \\ 
+      \hline 
+      \endhead
+
+      \input{presta_alpha.tex}
+    \end{longtable}
+  \end{center}
+\end{document}
