@@ -2,7 +2,7 @@
 \documentclass{article}
 \usepackage{geometry}
 
-\geometry{a4paper, margin=.5cm}
+\geometry{a4paper, margin=0.5cm}
 \usepackage[frenchb]{babel}
 \usepackage{longtable}
 \usepackage{makecell}
@@ -10,27 +10,34 @@
 \usepackage{hyperref}
 \usepackage{graphicx}
 \usepackage{multicol}
-\usepackage{textcomp}
 \definecolor{colorComptoir}{RGB}{253,215,114}
 \newcommand{\nameWidth}{13cm}
 \newcommand{\dataWidth}{6cm}
+\setlength{\footskip}{0pt}
 \hypersetup{
     colorlinks=true,
     linkcolor=blue,
     filecolor=magenta,
     urlcolor=cyan,
     }
-    \setlength{\footskip}{0pt}
 \begin{document}
 
 \input{page_garde.tex}
 \pagebreak
 
   \begin{center}
-\input{presta_nom_comptoir.tex}
+\input{presta_zip_comptoir.tex}
 
 \pagebreak
 
-  \input{presta_nom_category.tex}
+    {\Large Les prestataires du réseau par ordre alphabétique}
+    \begin{longtable}{|m{\nameWidth} | m{\dataWidth}|}
+      \hline
+      Nom & Coordonnées  \\ 
+      \hline 
+      \endhead
+
+      \input{presta_zip_alpha.tex}
+    \end{longtable}
   \end{center}
 \end{document}
