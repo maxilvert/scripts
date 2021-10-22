@@ -308,7 +308,7 @@ class dolibarr_DB_manager:
         to_print += '\\makecell*[{{p{\\dataWidth}}}]{\n'
         if p[1] is not None:
             to_print += '%s, '%(p[1])
-        to_print += '%s\\\\\n'%(p[2])
+        to_print += '%s %s\\\\\n'%(p[6], p[2])
         if p[5] is not None:
             to_print += '%s\\\\\n'%(self.format_phone(p[5]))
         if p[4] is not None and p[4] != '':
@@ -316,11 +316,19 @@ class dolibarr_DB_manager:
         to_print += '}\n\\\\\n\\hline\n'
         return to_print
 
-    def gen_tex_alpha(self, basename):    
-        presta_sql = "select nom,address,town,description_francais,url,phone from llx_societe_extrafields \
+    def sorting_sql(self, sorting_field):    
+        if sorting_field == 'nom':
+            return 'nom'
+        elif sorting_field == 'zip':
+            return 'zip,town,nom'
+
+    def gen_tex_alpha(self, basename, sorting_field):    
+        sorting_sql = self.sorting_sql(sorting_field)
+
+        presta_sql = f"select nom,address,town,description_francais,url,phone,zip from llx_societe_extrafields \
                                          join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
                                          where client=1 and status=1\
-                                         order by nom;"
+                                         order by {sorting_sql};"
     
         category_sql = "select label from llx_societe \
                            join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
@@ -335,16 +343,17 @@ class dolibarr_DB_manager:
             category = self.flatten_category(self.mycursor.fetchall())
             to_print += self.presta_tex(p, category, comptoir_only=False)
 
-        with open(basename + '_alpha.tex', 'w') as tex_file:
+        with open(basename + f'_{sorting_field}_alpha.tex', 'w') as tex_file:
             tex_file.write(to_print)
 
-    def gen_tex_category(self, basename, comptoir_only=True):    
-        presta_sql = "select nom,address,town,description_francais,url,phone from llx_societe_extrafields \
+    def gen_tex_category(self, basename, sorting_field, comptoir_only=True):    
+        sorting_sql = self.sorting_sql(sorting_field)
+        presta_sql = f"select nom,address,town,description_francais,url,phone,zip from llx_societe_extrafields \
                                          join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
                                          join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
                                          join llx_categorie on llx_categorie.rowid=fk_categorie \
                                          where client=1 and status=1 and label=%s\
-                                         order by nom;"
+                                         order by {sorting_sql};"
     
         category_sql = "select label from llx_societe \
                            join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
@@ -353,11 +362,11 @@ class dolibarr_DB_manager:
 
         if comptoir_only:
             category = ["Comptoirs d'échanges"]
-            fname = basename + '_comptoir.tex'
+            fname = basename + f'_{sorting_field}_comptoir.tex'
         else:
             category = self.fetch_categories()
             category.remove("Comptoirs d'échanges")
-            fname = basename + '_category.tex'
+            fname = basename + f'_{sorting_field}_category.tex'
 
         to_print = ''
         for cat in category:
@@ -378,9 +387,11 @@ class dolibarr_DB_manager:
 
 
     def gen_tex_gogo(self, basename):    
-        self.gen_tex_alpha(basename)
-        self.gen_tex_category(basename)
-        self.gen_tex_category(basename, comptoir_only=False)
+        self.gen_tex_alpha(basename, 'nom')
+        self.gen_tex_alpha(basename, 'zip')
+        self.gen_tex_category(basename, 'nom', comptoir_only=True)
+        self.gen_tex_category(basename, 'zip', comptoir_only=True)
+        self.gen_tex_category(basename, 'nom', comptoir_only=False)
 
 
 def export(args):
