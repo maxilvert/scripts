@@ -11,8 +11,10 @@ cd $MDDB_DIR/tex
 python3 $MDDB_DIR/manage_dolibarr_db.py export -f tex -o presta > $LOGFILE 2>&1
 pdflatex annuaire_category.tex >> $LOGFILE 2>&1
 pdflatex annuaire_alpha.tex >> $LOGFILE 2>&1
+pdflatex annuaire_code-postal.tex >> $LOGFILE 2>&1
 pdfbook2 -o 10 -i 110 -t 10 -b 10 annuaire_category.pdf >> $LOGFILE 2>&1
 pdfbook2 -o 10 -i 110 -t 10 -b 10 annuaire_alpha.pdf >> $LOGFILE 2>&1
+pdfbook2 -o 10 -i 110 -t 10 -b 10 annuaire_code-postal.pdf >> $LOGFILE 2>&1
 mv *.pdf $PUBLIC_HTML/$DATE
 
 
