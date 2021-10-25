@@ -24,6 +24,5 @@ python3 $MDDB_DIR/manage_dolibarr_db.py export -f json >> $LOGFILE 2>&1
 python3 $MDDB_DIR/manage_dolibarr_db.py export -f csv >> $LOGFILE 2>&1
 python3 $MDDB_DIR/manage_dolibarr_db.py update --dry_run >> $LOGFILE 2>&1
 cd ..
-ls
 rm current
 ln -s $DATE current
