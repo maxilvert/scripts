@@ -299,18 +299,26 @@ class dolibarr_DB_manager:
     def presta_tex(self, p, category, comptoir_only):
         to_print = '\\makecell*[{{p{\\nameWidth}}}]{\n'
 
+        # Name and category in parenthesis
         to_print += '\\textbf{%s} (%s)\\\\\n'%(self.latexify(p[0]), self.category_txt(category))
+        # Add the "Comptoirs d'échange" stamp in the description if not in the
+        # dedicated section to comptoirs d'échange
         if "Comptoirs d'échanges" in category and not comptoir_only: 
             to_print += "\\colorbox{colorComptoir}{\\textbf{Comptoirs d'échanges}}\\\\\n"
+        # Description if any
         if p[3] is not None and p[3] != '':
             to_print += '%s\n'%(self.latexify(p[3]))
         to_print += '}\n&\n'
         to_print += '\\makecell*[{{p{\\dataWidth}}}]{\n'
-        if p[1] is not None:
+        # if street available, print it
+        if p[1] is not None and p[1] != '':
             to_print += '%s, '%(p[1])
+        # zip and town
         to_print += '%s %s\\\\\n'%(p[6], p[2])
+        # phone if available
         if p[5] is not None:
             to_print += '%s\\\\\n'%(self.format_phone(p[5]))
+        # Website if available
         if p[4] is not None and p[4] != '':
             to_print += '{\\small \\url{%s}}\n'%(self.latexify(self.improve_url(p[4], p[0])))
         to_print += '}\n\\\\\n\\hline\n'
@@ -373,7 +381,8 @@ class dolibarr_DB_manager:
             self.mycursor.execute(presta_sql, (cat,))
             presta = self.mycursor.fetchall()
             if len(presta) > 0:
-                to_print += '{\\Large %s}\n'%(cat)
+                to_print += '\\section*{%s}\n'%(cat)
+                to_print += '\\addcontentsline{toc}{section}{%s}\n'%(cat)
                 to_print += '\\begin{longtable}{|m{\\nameWidth} | m{\\dataWidth}|}\n\\hline\nNom & Coordonnées  \\\\\n\\hline\n\\endhead\n'
     
                 for p in presta:
