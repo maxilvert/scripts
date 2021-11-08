@@ -1,0 +1,44 @@
+
+\documentclass{article}
+\usepackage{geometry}
+
+\geometry{a4paper, margin=.5cm}
+\usepackage[frenchb]{babel}
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{multicol}
+\usepackage{textcomp}
+\definecolor{colorComptoir}{RGB}{253,215,114}
+\newcommand{\nameWidth}{13cm}
+\newcommand{\dataWidth}{6cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=red,
+    }
+    \setlength{\footskip}{0pt}
+
+\addto\captionsfrench{ \renewcommand*\contentsname{} }
+
+\begin{document}
+
+\large
+\input{page_garde_A5.tex}
+
+  \begin{center}
+\input{presta_nom_comptoir.tex}
+
+  \input{presta_nom_category.tex}
+  \end{center}
+
+\pagebreak
+
+  \begin{center}
+    \includegraphics[width=0.9\linewidth]{carte.png}
+  \end{center}
+
+\end{document}
