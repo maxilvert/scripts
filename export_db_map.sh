@@ -30,8 +30,8 @@ fi
 
 pdfbook2 -o 10 -i 110 -t 10 -b 10 pok.pdf
 mv pok-book.pdf $FNAME-book.pdf
-rm -f pok.pdf $FNAME.pdf
-mv $FNAME-book.pdf annuaire_category.pdf annuaire_alpha.pdf annuaire_code-postal.pdf $PUBLIC_HTML/$DATE
+rm -f pok.pdf 
+mv $FNAME.pdf $FNAME-book.pdf annuaire_category.pdf annuaire_alpha.pdf annuaire_code-postal.pdf $PUBLIC_HTML/$DATE
 
 
 #generation des donnees pour la mise a jour des cartes
