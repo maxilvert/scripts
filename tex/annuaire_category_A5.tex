@@ -11,6 +11,7 @@
 \usepackage{graphicx}
 \usepackage{multicol}
 \usepackage{textcomp}
+\usepackage[most]{tcolorbox}
 \definecolor{colorComptoir}{RGB}{253,215,114}
 \newcommand{\nameWidth}{13cm}
 \newcommand{\dataWidth}{6cm}
@@ -21,7 +22,12 @@
     urlcolor=red,
     }
     \setlength{\footskip}{0pt}
-
+\colorlet{LightLavender}{red!40!}
+\tcbset{on line, 
+        boxsep=4pt, left=0pt,right=0pt,top=0pt,bottom=0pt,
+        colframe=white,colback=colorComptoir,  
+        highlight math style={enhanced}
+        }
 \addto\captionsfrench{ \renewcommand*\contentsname{} }
 
 \begin{document}
