@@ -23,7 +23,7 @@ TO_ADD=$(((4 - NPAGES % 4)%4))
 echo $NPAGES $TO_ADD
 if [[ $TO_ADD -gt 0 ]]
 then
-  pdftk A=$FNAME.pdf B=blank.pdf cat A1-r2 B1-$TO_ADD Aend output pok.pdf 
+  pdftk A=$FNAME.pdf B=blank.pdf cat A B1-$TO_ADD output pok.pdf 
 else
   mv $FNAME.pdf  pok.pdf
 fi
