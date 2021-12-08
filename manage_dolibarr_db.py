@@ -381,6 +381,7 @@ class dolibarr_DB_manager:
             self.mycursor.execute(presta_sql, (cat,))
             presta = self.mycursor.fetchall()
             if len(presta) > 0:
+                to_print += '\\Needspace{5\\baselineskip}\n'
                 to_print += '\\section*{%s}\n'%(cat)
                 to_print += '\\addcontentsline{toc}{section}{%s}\n'%(cat)
                 to_print += '\\begin{longtable}{|m{\\nameWidth} | m{\\dataWidth}|}\n\\hline\nNom & Coordonnées  \\\\\n\\hline\n\\endhead\n'
@@ -389,7 +390,8 @@ class dolibarr_DB_manager:
                     self.mycursor.execute(category_sql, (p[0],))
                     category = self.flatten_category(self.mycursor.fetchall())
                     to_print += self.presta_tex(p, category, comptoir_only)
-                to_print += '\\end{longtable}\n\n'
+                to_print += '\\end{longtable}\n'
+                to_print += '\\vspace{2cm}\n\n'
     
         with open(fname, 'w') as tex_file:
             tex_file.write(to_print)
