@@ -37,20 +37,11 @@ class UDM_Error(Exception):
 
 class dolibarr_DB_manager:
     def __init__(self):
-<<<<<<< HEAD
         self.mydb = mysql.connector.connect(
           host=os.environ['DOLIBARR_DB_HOST'],
           user=os.environ['DOLIBARR_DB_USER'],
           password=os.environ['DOLIBARR_DB_PASS'],
           database=os.environ['DOLIBARR_DB_DATABASE'],
-=======
-        password = "root"
-        self.mydb = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password=password,
-            database="dolibarreusko"
->>>>>>> b538b776b2ba079b7a2081d7df111dd095e03d3e
         )
 
         self.mycursor = self.mydb.cursor()
@@ -231,7 +222,6 @@ class dolibarr_DB_manager:
                     except UDM_Error as e:
                         print(e.message)
 
-<<<<<<< HEAD
     def gen_json_gogo(self, basename):    
         presta_with_gps_sql = """SELECT
 	sp.lastname AS nom,
@@ -257,34 +247,6 @@ JOIN llx_categorie ON llx_categorie.rowid = llx_categorie_contact.fk_categorie
 WHERE lastname=%s
 ;
  """
-=======
-    def gen_json_gogo(self, basename):
-        presta_with_gps_sql = "SELECT \
-	sp.rowid,\
-	s.code_client,\
-	sp.lastname AS nom,\
-	IFNULL(REPLACE(spe.description_francais, '\r\n', '\n'), '') AS description_francais,\
-	TRIM(TRIM('\n' FROM SUBSTRING_INDEX(REPLACE(sp.address, '\r\n', '\n'), '/', -1))) AS address,\
-	sp.zip,\
-	TRIM(SUBSTRING_INDEX(sp.town, '/', -1)) AS town,\
-	IFNULL(spe.latitude, '') AS latitude,\
-	IFNULL(spe.longitude, '') AS longitude,\
-	IFNULL(s.url, '') AS url\
-FROM llx_societe s\
-JOIN llx_socpeople sp ON s.rowid = sp.fk_soc\
-JOIN llx_socpeople_extrafields spe ON sp.rowid = spe.fk_object\
-JOIN llx_categorie_contact cc ON sp.rowid = cc.fk_socpeople\
-	AND cc.fk_categorie = 370 -- Adresse d'activité\
-WHERE s.code_client IS NOT NULL AND s.client = 1 AND s.status = 1\
-;"
-
-        category_sql = "SELECT label FROM llx_socpeople \
-JOIN llx_categorie_contact ON llx_categorie_contact.fk_socpeople = llx_socpeople.rowid\
-JOIN llx_categorie ON llx_categorie.rowid = llx_categorie_contact.fk_categorie\
-	AND llx_categorie.fk_parent = 444 -- sous-catégorie de Annuaire général\
-WHERE lastname='%s'\
-;"
->>>>>>> b538b776b2ba079b7a2081d7df111dd095e03d3e
 
         self.mycursor.execute(presta_with_gps_sql)
         presta = self.mycursor.fetchall()
