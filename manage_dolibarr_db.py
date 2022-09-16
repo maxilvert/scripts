@@ -35,12 +35,11 @@ class UDM_Error(Exception):
 
 class dolibarr_DB_manager:
     def __init__(self):
-        password = os.environ['DOLIBARR_DB_PASS']
         self.mydb = mysql.connector.connect(
-          host="localhost",
-          user="root",
-          password=password,
-          database="dolibarr"
+          host=os.environ['DOLIBARR_DB_HOST'],
+          user=os.environ['DOLIBARR_DB_USER'],
+          password=os.environ['DOLIBARR_DB_PASS'],
+          database=os.environ['DOLIBARR_DB_DATABASE'],
         )
         
         self.mycursor = self.mydb.cursor()
@@ -222,20 +221,35 @@ class dolibarr_DB_manager:
                         print(e.message)
 
     def gen_json_gogo(self, basename):    
-        presta_with_gps_sql = "select nom,address,town,latitude,longitude,description_francais,url from llx_societe_extrafields \
-                                         join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
-                                         where latitude is not NULL and client=1 and status=1;"
+        presta_with_gps_sql = """SELECT
+	sp.lastname AS nom,
+	TRIM(TRIM('\n' FROM SUBSTRING_INDEX(REPLACE(sp.address, '\r\n', '\n'), '/', -1))) AS address,
+	TRIM(SUBSTRING_INDEX(sp.town, '/', -1)) AS town,
+	IFNULL(spe.latitude, '') AS latitude,
+	IFNULL(spe.longitude, '') AS longitude,
+	IFNULL(REPLACE(spe.description_francais, '\r\n', '\n'), '') AS description_francais,
+	IFNULL(s.url, '') AS url
+FROM llx_societe s
+JOIN llx_socpeople sp ON s.rowid = sp.fk_soc
+JOIN llx_socpeople_extrafields spe ON sp.rowid = spe.fk_object
+JOIN llx_categorie_contact cc ON sp.rowid = cc.fk_socpeople
+	AND cc.fk_categorie = 370 -- Adresse d'activité
+WHERE s.code_client IS NOT NULL AND s.client = 1 AND s.status = 1
+;
+"""
     
-        category_sql = "select label from llx_societe \
-                           join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
-                           join llx_categorie on llx_categorie.rowid=fk_categorie \
-                           where nom=%s;"
+        category_sql = """SELECT label FROM llx_socpeople
+JOIN llx_categorie_contact ON llx_categorie_contact.fk_socpeople = llx_socpeople.rowid
+JOIN llx_categorie ON llx_categorie.rowid = llx_categorie_contact.fk_categorie
+	AND llx_categorie.fk_parent = 444 -- sous-catégorie de "Annuaire général"
+WHERE lastname=%s
+;
+ """
 
         self.mycursor.execute(presta_with_gps_sql)
         presta = self.mycursor.fetchall()
         all_presta = []
         for p in presta:
-
             self.mycursor.execute(category_sql, (p[0],))
             category = self.mycursor.fetchall()
             if category == []:
