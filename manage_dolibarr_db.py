@@ -200,24 +200,37 @@ class dolibarr_DB_manager:
         return f"{basename}_{name}.csv"
 
     def gen_csv_osm(self, basename):
-        presta_with_gps_categorie_sql = "select nom,address,town,latitude,longitude,description_francais,url from llx_societe_extrafields \
-                                         join llx_societe on llx_societe_extrafields.fk_object = llx_societe.rowid \
-                                         join llx_categorie_societe on llx_categorie_societe.fk_soc=llx_societe.rowid \
-                                         join llx_categorie on llx_categorie.rowid=fk_categorie \
-                                         where latitude is not NULL and client=1 and status=1 and label=%s;"
+        presta_with_gps_sql = """SELECT
+	sp.lastname AS nom,
+	TRIM(TRIM('\n' FROM SUBSTRING_INDEX(REPLACE(sp.address, '\r\n', '\n'), '/', -1))) AS address,
+	TRIM(SUBSTRING_INDEX(sp.town, '/', -1)) AS town,
+	IFNULL(spe.latitude, '') AS latitude,
+	IFNULL(spe.longitude, '') AS longitude,
+	IFNULL(REPLACE(spe.description_francais, '\r\n', '\n'), '') AS description_francais,
+	IFNULL(s.url, '') AS url
+FROM llx_societe s
+JOIN llx_socpeople sp ON s.rowid = sp.fk_soc
+JOIN llx_socpeople_extrafields spe ON sp.rowid = spe.fk_object
+JOIN llx_categorie_contact cc ON sp.rowid = cc.fk_socpeople
+	AND cc.fk_categorie = 370 -- Adresse d'activité
+WHERE s.code_client IS NOT NULL AND s.client = 1 AND s.status = 1
+;
+"""
+    
 
         for category in self.fetch_categories():
             val = (category,)
-            self.mycursor.execute(presta_with_gps_categorie_sql, val)
+            self.mycursor.execute(presta_with_gps_sql, val)
             presta = self.mycursor.fetchall()
-            with open(self.csv_filename(basename, category), 'w') as csvfile:
+            with open(self.csv_filename(basename, "test"), 'w') as csvfile:
                 writer = csv.writer(csvfile, delimiter=';', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                writer.writerow(("nom", "adresse", "commune", "latitude", "longitude", "description", "url"))
+                writer.writerow(("nom", "adresse", "commune", "latitude", "longitude", "description", "url","categorie"))
                 for p in presta:
                     try:
                         if self.valid_gps(p):
                             plist = list(p)
                             plist[6] = self.improve_url(plist[6], plist[0])
+                            plist[7]=[cat[0] for cat in category]
                             writer.writerow(plist)
                     except UDM_Error as e:
                         print(e.message)
